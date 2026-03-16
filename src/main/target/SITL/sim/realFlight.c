@@ -239,7 +239,7 @@ static void exchangeData(void)
         }
     }
 
-    char requestBody[1024] = "<ExchangeData><pControlInputs><m-selectedChannels>12</m-selectedChannels><m-channelValues-0to1>";
+    char requestBody[1024] = "<ExchangeData><pControlInputs><m-selectedChannels>4095</m-selectedChannels><m-channelValues-0to1>";
     
     for (int i = 0; i < RF_MAX_CHANNEL_COUNT; i++) {
         char value[32];
@@ -428,7 +428,6 @@ static void* soapWorker(void* arg)
             // RealFlight seems to not properly close the connection on its side if the connection is interrupted, but only after a timeout of about 30 seconds. 
             // During this time the interface is not usable, but without this step it would be stuck in an unusable state until the next restart of the SITL.
             if (!restoreOriginalControllerDevice()) {
-                fprintf(stderr, "[SIM] Failed to restore original controller device in RealFlight. RealFlight might be in a broken state. Retrying...\n");
                 delay(1000);
                 continue;
             }

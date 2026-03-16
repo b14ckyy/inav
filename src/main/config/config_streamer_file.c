@@ -47,7 +47,6 @@ bool configFileSetPath(char* path)
 void config_streamer_impl_unlock(void)
 {
     if (eepromFd != NULL) {
-        fprintf(stderr, "[EEPROM] Unable to load %s\n", eepromPath);
         return;
     }
 
