@@ -667,7 +667,7 @@ groups:
     condition: USE_PITOT
     members:
       - name: pitot_hardware
-        description: "Selection of pitot hardware."
+        description: "Selection of pitot hardware. VIRTUAL only works if a GPS is enabled."
         default_value: "NONE"
         table: pitot_hardware
       - name: pitot_lpf_milli_hz
