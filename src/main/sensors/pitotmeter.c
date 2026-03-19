@@ -136,7 +136,7 @@ bool pitotDetect(pitotDev_t *dev, uint8_t pitotHardwareToUse)
         case PITOT_VIRTUAL:
             if (pitotHardwareToUse != PITOT_AUTODETECT) {
 #if defined(USE_WIND_ESTIMATOR) && defined(USE_PITOT_VIRTUAL)
-                 if (virtualPitotDetect(dev)) {
+                if (virtualPitotDetect(dev)) {
                     pitotHardware = PITOT_VIRTUAL;
                     break;
                 }
