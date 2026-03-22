@@ -18,7 +18,7 @@
 
 #pragma once
 
-#define TARGET_BOARD_IDENTIFIER "H743"
+#define TARGET_BOARD_IDENTIFIER "BB43"
 
 #if defined(BLUEBERRYH743HD)
   #define USBD_PRODUCT_STRING     "BLUEBERRYH743HD"
@@ -33,7 +33,6 @@
 
 #define BEEPER                  PA15
 #define BEEPER_INVERTED
-#define BEEPER_PWM_FREQUENCY    2500
 
 // *************** IMU generic ***********************
 #define USE_DUAL_GYRO
@@ -152,11 +151,8 @@
 #define UART8_TX_PIN            PE1
 #define UART8_RX_PIN            PE0
 
-#define USE_SOFTSERIAL1
-#define SOFTSERIAL_1_TX_PIN      PC6  //TX6 pad
-#define SOFTSERIAL_1_RX_PIN      PC6  //TX6 pad
 
-#define SERIAL_PORT_COUNT       9
+#define SERIAL_PORT_COUNT       8
 
 #define DEFAULT_RX_TYPE         RX_TYPE_SERIAL
 #define SERIALRX_PROVIDER       SERIALRX_CRSF
@@ -198,6 +194,7 @@
 
 #define DEFAULT_FEATURES            (FEATURE_OSD | FEATURE_TELEMETRY | FEATURE_CURRENT_METER | FEATURE_VBAT | FEATURE_TX_PROF_SEL | FEATURE_BLACKBOX)
 #define CURRENT_METER_SCALE         250
+#define CURRENT_METER_OFFSET    400
 
 #define USE_SERIAL_4WAY_BLHELI_INTERFACE
 
