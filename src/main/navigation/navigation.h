@@ -709,7 +709,6 @@ void getWaypoint(uint8_t wpNumber, navWaypoint_t * wpData);
 void setWaypoint(uint8_t wpNumber, const navWaypoint_t * wpData);
 void resetWaypointList(void);
 bool navSetActiveWaypointIndex(uint8_t index);  // MSP2_INAV_SET_WP_INDEX: jump to WP during active mission
-bool navSetDesiredAltitude(int32_t altCm);      // MSP2_INAV_SET_ALT_TARGET: set target altitude (cm, relative to home)
 bool navSetCruiseHeading(int32_t headingCd);    // MSP2_INAV_SET_CRUISE_HEADING: set cruise/course-hold heading (centidegrees)
 bool loadNonVolatileWaypointList(bool clearIfLoaded);
 bool saveNonVolatileWaypointList(void);

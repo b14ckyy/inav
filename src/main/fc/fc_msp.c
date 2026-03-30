@@ -3706,17 +3706,6 @@ static mspResult_e mspFcProcessInCommand(uint16_t cmdMSP, sbuf_t *src)
         }
         return MSP_RESULT_ERROR;
 
-    case MSP2_INAV_SET_ALT_TARGET:
-        // Set a new target altitude while altitude-controlled navigation is active.
-        // Payload: I32  altitude_cm  (centimetres, relative to home)
-        if (dataSize == 4) {
-            int32_t altCm;
-            if (sbufReadI32Safe(&altCm, src) && navSetDesiredAltitude(altCm)) {
-                break;
-            }
-        }
-        return MSP_RESULT_ERROR;
-
     default:
         return MSP_RESULT_ERROR;
     }

@@ -3917,31 +3917,6 @@ bool navSetActiveWaypointIndex(uint8_t index)
 }
 
 /*
- * navSetDesiredAltitude - MSP2_INAV_SET_ALT_TARGET handler
- *
- * Commands the aircraft to climb or descend to 'altCm' centimetres above home
- * while altitude-controlled navigation (altitude hold, cruise, or WP mode) is
- * active.  The altitude controller already implements this path for waypoint
- * navigation (ROC_TO_ALT_TARGET); this function exposes it via MSP.
- *
- * Returns true on success, false when altitude control is not currently active.
- */
-bool navSetDesiredAltitude(int32_t altCm)
-{
-    if (!ARMING_FLAG(ARMED)) {
-        return false;
-    }
-
-    // Require active altitude control — covers althold, cruise and WP modes
-    if (!(navGetCurrentStateFlags() & NAV_CTL_ALT)) {
-        return false;
-    }
-
-    updateClimbRateToAltitudeController(0.0f, (float)altCm, ROC_TO_ALT_TARGET);
-    return true;
-}
-
-/*
  * navSetCruiseHeading - MSP2_INAV_SET_CRUISE_HEADING handler
  *
  * Sets the target heading while Cruise or Course Hold mode is active.
