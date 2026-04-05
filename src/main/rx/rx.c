@@ -94,6 +94,9 @@ static bool isRxSuspended = false;
 
 static rcChannel_t rcChannels[MAX_SUPPORTED_RC_CHANNEL_COUNT];
 
+// MSP aux channel overlay: non-zero values override rcChannels[].data for CH9-CH32
+static uint16_t mspAuxOverlay[MAX_SUPPORTED_RC_CHANNEL_COUNT];
+
 rxLinkStatistics_t rxLinkStatistics;
 rxRuntimeConfig_t rxRuntimeConfig;
 static uint8_t rcSampleIndex = 0;
@@ -512,6 +515,13 @@ bool calculateRxChannelsAndUpdateFailsafe(timeUs_t currentTimeUs)
     }
 #endif
 
+    // Apply MSP aux channel overlay (CH9-CH32)
+    for (int i = 8; i < 32; i++) {
+        if (mspAuxOverlay[i] > 0) {
+            rcChannels[i].data = mspAuxOverlay[i];
+        }
+    }
+
     // Update failsafe
     if (rxFlightChannelsValid && rxSignalReceived) {
         failsafeOnValidDataReceived();
@@ -660,6 +670,13 @@ int16_t rxGetChannelValue(unsigned channelNumber)
         return getRcChannelOverride(channelNumber, rcChannels[channelNumber].data);
     } else {
         return rcChannels[channelNumber].data;
+    }
+}
+
+void rxMspAuxOverlaySet(uint8_t channelIndex, uint16_t value)
+{
+    if (channelIndex >= 8 && channelIndex < 32) {
+        mspAuxOverlay[channelIndex] = value;
     }
 }
 

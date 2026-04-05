@@ -232,3 +232,7 @@ void resumeRxSignal(void);
 // filtering and some extra processing like value holding
 // during failsafe.
 int16_t rxGetChannelValue(unsigned channelNumber);
+
+// MSP aux channel overlay (CH9-CH32). Sets a channel value that persists
+// across RX update cycles. value=0 clears the overlay for that channel.
+void rxMspAuxOverlaySet(uint8_t channelIndex, uint16_t value);

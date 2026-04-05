@@ -126,3 +126,5 @@
 #define MSP2_INAV_SET_GVAR                      0x2214
 
 #define MSP2_INAV_FULL_LOCAL_POSE               0x2220
+
+#define MSP2_INAV_SET_AUX_RC                    0x2230
