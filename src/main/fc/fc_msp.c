@@ -2424,8 +2424,8 @@ static mspResult_e mspFcProcessInCommand(uint16_t cmdMSP, sbuf_t *src)
             const uint8_t startChannel = defByte >> 3;          // Bits 7-3: start channel index (0-31)
             const uint8_t resolutionMode = defByte & 0x07;      // Bits 2-0: resolution
 
-            // Safety: CH1-CH8 (index 0-7) are protected
-            if (startChannel < 8) {
+            // Safety: CH1-CH12 (index 0-11) are protected
+            if (startChannel < 12) {
                 return MSP_RESULT_ERROR;
             }
 
