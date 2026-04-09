@@ -2415,7 +2415,8 @@ static mspResult_e mspFcProcessInCommand(uint16_t cmdMSP, sbuf_t *src)
 
     case MSP2_INAV_SET_AUX_RC:
         {
-            if (dataSize < 2) {
+            // Max valid payload: 1 def byte + 24 channels × 2 bytes (16-bit) = 49 bytes
+            if (dataSize < 2 || dataSize > 49) {
                 return MSP_RESULT_ERROR;
             }
 
