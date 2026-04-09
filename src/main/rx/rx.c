@@ -516,15 +516,27 @@ bool calculateRxChannelsAndUpdateFailsafe(timeUs_t currentTimeUs)
 #endif
 
     // Apply MSP aux channel overlay (CH13-CH32)
-    for (int i = 12; i < 32; i++) {
-        if (mspAuxOverlay[i] > 0) {
-#if defined(USE_RX_MSP) && defined(USE_MSP_RC_OVERRIDE)
-            // Skip channels controlled by MSP RC Override when active
-            if (IS_RC_MODE_ACTIVE(BOXMSPRCOVERRIDE) && (rxConfig()->mspOverrideChannels & (1U << i))) {
-                continue;
+    {
+        int overlayStart = 12;
+#ifdef USE_RX_MSP
+        // When MSP is the primary RX, skip channels covered by MSP_SET_RAW_RC
+        if (rxConfig()->receiverType == RX_TYPE_MSP) {
+            const uint8_t mspChannels = rxMspGetLastChannelCount();
+            if (mspChannels > overlayStart) {
+                overlayStart = mspChannels;
             }
+        }
 #endif
-            rcChannels[i].data = mspAuxOverlay[i];
+        for (int i = overlayStart; i < 32; i++) {
+            if (mspAuxOverlay[i] > 0) {
+#if defined(USE_RX_MSP) && defined(USE_MSP_RC_OVERRIDE)
+                // Skip channels controlled by MSP RC Override when active
+                if (IS_RC_MODE_ACTIVE(BOXMSPRCOVERRIDE) && (rxConfig()->mspOverrideChannels & (1U << i))) {
+                    continue;
+                }
+#endif
+                rcChannels[i].data = mspAuxOverlay[i];
+            }
         }
     }
 
