@@ -3684,6 +3684,28 @@ static mspResult_e mspFcProcessInCommand(uint16_t cmdMSP, sbuf_t *src)
         }
         break;
 
+    case MSP2_INAV_SET_CRUISE_HEADING:
+        // Set heading while Cruise / Course Hold is active.
+        // Payload: I32  heading_centidegrees  (0–35999)
+        if (dataSize == 4) {
+            int32_t headingCd;
+            if (sbufReadI32Safe(&headingCd, src) && navSetCruiseHeading(headingCd)) {
+                break;
+            }
+        }
+        return MSP_RESULT_ERROR;
+
+    case MSP2_INAV_SET_WP_INDEX:
+        // Jump to waypoint N during an active WP mission.
+        // Payload: U8  wp_index  (0-based, relative to mission start waypoint)
+        if (dataSize == 1) {
+            uint8_t wpIndex;
+            if (sbufReadU8Safe(&wpIndex, src) && navSetActiveWaypointIndex(wpIndex)) {
+                break;
+            }
+        }
+        return MSP_RESULT_ERROR;
+
     default:
         return MSP_RESULT_ERROR;
     }
