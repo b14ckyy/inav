@@ -2462,7 +2462,27 @@ static navigationFSMEvent_t navOnEnteringState_NAV_STATE_FW_LANDING_LOITER(navig
         }
     }
 
-    fpVector3_t tmpPoint = posControl.fwLandState.landPos;
+    // Offset loiter position perpendicular to runway in the approach circuit direction (LEFT/RIGHT)
+    fpVector3_t tmpPoint;
+    int32_t refHeading = 0;
+    if (fwAutolandApproachConfig(posControl.fwLandState.approachSettingIdx)->landApproachHeading1 != 0) {
+        refHeading = ABS(DEGREES_TO_CENTIDEGREES(fwAutolandApproachConfig(posControl.fwLandState.approachSettingIdx)->landApproachHeading1));
+    } else if (fwAutolandApproachConfig(posControl.fwLandState.approachSettingIdx)->landApproachHeading2 != 0) {
+        refHeading = ABS(DEGREES_TO_CENTIDEGREES(fwAutolandApproachConfig(posControl.fwLandState.approachSettingIdx)->landApproachHeading2));
+    }
+
+    if (refHeading != 0) {
+        int32_t offsetDir;
+        if (fwAutolandApproachConfig(posControl.fwLandState.approachSettingIdx)->approachDirection == FW_AUTOLAND_APPROACH_DIRECTION_LEFT) {
+            offsetDir = wrap_36000(refHeading - 9000);
+        } else {
+            offsetDir = wrap_36000(refHeading + 9000);
+        }
+        calculateFarAwayPos(&tmpPoint, &posControl.fwLandState.landPos, offsetDir, navConfig()->fw.loiter_radius);
+    } else {
+        tmpPoint = posControl.fwLandState.landPos;
+    }
+
     tmpPoint.z = posControl.fwLandState.landAproachAltAgl;
     setDesiredPosition(&tmpPoint, posControl.fwLandState.landPosHeading, NAV_POS_UPDATE_XY | NAV_POS_UPDATE_Z | NAV_POS_UPDATE_HEADING);
 
