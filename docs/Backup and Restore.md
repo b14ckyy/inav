@@ -8,8 +8,8 @@ For manual CLI-based backup and restore, see the [CLI documentation](Cli.md#back
 
 ### What happens automatically
 
-1. **Before flashing** (with Full Chip Erase enabled): Your current CLI configuration (`diff all`) is automatically captured and saved to the backup directory.
-2. **After flashing**: Depending on the situation, the Configurator offers to restore your settings:
+1. **Before flashing** (with or without Full Chip Erase enabled): Your current CLI configuration (`diff all`) is automatically captured and saved to the backup directory.
+2. **After flashing**: Depending on the situation, the Configurator offers to restore your settings if Full Chip Erase was enabled:
 
 | Scenario | Behavior |
 |----------|----------|
