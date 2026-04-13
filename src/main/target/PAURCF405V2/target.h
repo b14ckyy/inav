@@ -38,12 +38,12 @@
 
 // Board ships with either ICM42605/ICM42688P or BMI270 - same CS pin (PC14)
 #define USE_IMU_ICM42605
-#define IMU_ICM42605_ALIGN      CW270_DEG_FLIP
+#define IMU_ICM42605_ALIGN      CW0_DEG
 #define ICM42605_SPI_BUS        BUS_SPI1
 #define ICM42605_CS_PIN         PC14
 
 #define USE_IMU_BMI270
-#define IMU_BMI270_ALIGN        CW270_DEG_FLIP
+#define IMU_BMI270_ALIGN        CW180_DEG
 #define BMI270_SPI_BUS          BUS_SPI1
 #define BMI270_CS_PIN           PC14
 
