@@ -742,6 +742,12 @@ static bool mspFcProcessOutCommand(uint16_t cmdMSP, sbuf_t *dst, mspPostProcessF
         sbufWriteU16(dst, getRSSI());
         break;
 
+    case MSP2_INAV_GET_LINK_STATS:
+        sbufWriteU8(dst, (uint8_t)-rxLinkStatistics.uplinkRSSI);
+        sbufWriteU8(dst, rxLinkStatistics.uplinkLQ);
+        sbufWriteU8(dst, (uint8_t)rxLinkStatistics.uplinkSNR);
+        break;
+
     case MSP_LOOP_TIME:
         sbufWriteU16(dst, gyroConfig()->looptime);
         break;

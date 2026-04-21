@@ -6953,6 +6953,35 @@
         "notes": "Requires `USE_CURRENT_METER`/`USE_ADC` for current-related fields; values fall back to zero when unavailable. Capacity fields are reported in the units configured by `batteryMetersConfig()->capacity_unit` (mAh or mWh).",
         "description": "Provides detailed analog sensor readings, superseding `MSP_ANALOG` with higher precision and additional fields."
     },
+    "MSP2_INAV_GET_LINK_STATS": {
+        "code": 8451,
+        "mspv": 2,
+        "request": null,
+        "reply": {
+            "payload": [
+                {
+                    "name": "uplinkRSSI_dBm",
+                    "ctype": "uint8_t",
+                    "desc": "Uplink RSSI in dBm, sent as a positive magnitude (`getRSSI()`). For example, 70 means -70dBm.",
+                    "units": "-dBm"
+                },
+                {
+                    "name": "uplinkLQ",
+                    "ctype": "uint8_t",
+                    "desc": "Uplink Link Quality (`rxLinkStatistics.uplinkLQ`)",
+                    "units": "%"
+                },
+                {
+                    "name": "uplinkSNR",
+                    "ctype": "int8_t",
+                    "desc": "Uplink Signal-to-Noise Ratio (`rxLinkStatistics.uplinkSNR`)",
+                    "units": "dB"
+                }
+            ]
+        },
+        "notes": "Useful for GCS monitoring of the active RC link quality and signal margin.",
+        "description": "Provides uplink RC link statistics for monitoring on a GCS."
+    },
     "MSP2_INAV_MISC": {
         "code": 8195,
         "mspv": 2,

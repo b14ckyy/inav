@@ -16,23 +16,16 @@
  */
 
 #include <stdint.h>
+
 #include "platform.h"
 
 #include "fc/fc_msp_box.h"
-
+#include "fc/config.h"
+#include "io/serial.h"
 #include "io/piniobox.h"
-
-#include "drivers/pwm_output.h"
-#include "drivers/pwm_mapping.h"
 
 void targetConfiguration(void)
 {
-    // Make sure S1-S4 default to Motors
-
-    timerOverridesMutable(timer2id(TIM3))->outputMode = OUTPUT_MODE_MOTORS;
-    timerOverridesMutable(timer2id(TIM2))->outputMode = OUTPUT_MODE_MOTORS;
-
-    // Pinio Box params as per manufacturer specification
     pinioBoxConfigMutable()->permanentId[0] = BOX_PERMANENT_ID_USER1;
     pinioBoxConfigMutable()->permanentId[1] = BOX_PERMANENT_ID_USER2;
 }
