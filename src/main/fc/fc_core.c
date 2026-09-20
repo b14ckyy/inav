@@ -71,6 +71,7 @@
 #include "io/dashboard.h"
 #include "io/gps.h"
 #include "io/serial.h"
+#include "io/sim_stream.h"
 #include "io/statusindicator.h"
 #include "io/asyncfatfs/asyncfatfs.h"
 #include "io/piniobox.h"
@@ -916,6 +917,11 @@ void FAST_CODE taskGyro(timeUs_t currentTimeUs) {
     /* Update actual hardware readings */
     gyroUpdate();
 
+#ifdef USE_SIM_STREAM
+    // the USB VCP driver has no receive callback, so its ring has to be drained by hand
+    simStreamPoll();
+#endif
+
 #ifdef USE_OPFLOW
     if (sensors(SENSOR_OPFLOW)) {
         opflowGyroUpdateCallback(currentDeltaTime);
@@ -1082,6 +1088,11 @@ void taskMainPidLoop(timeUs_t currentTimeUs)
         writeMotors();
     }
 #endif
+
+#ifdef USE_SIM_STREAM
+    simStreamOnPidLoop();
+#endif
+
     // Check if landed, FW and MR
     if (STATE(ALTITUDE_CONTROL)) {
         updateLandingStatus(US2MS(currentTimeUs));

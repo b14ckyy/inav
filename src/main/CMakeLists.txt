@@ -413,6 +413,8 @@ main_sources(COMMON_SRC
     io/serial_4way_avrootloader.h
     io/serial_4way_stk500v2.c
     io/serial_4way_stk500v2.h
+    io/sim_stream.c
+    io/sim_stream.h
     io/statusindicator.c
     io/statusindicator.h
     io/rcdevice.c

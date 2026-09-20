@@ -119,6 +119,7 @@
 #include "io/rcdevice_cam.h"
 #include "io/motor_srxl2.h"
 #include "io/serial.h"
+#include "io/sim_stream.h"
 #include "io/displayport_msp.h"
 #include "io/smartport_master.h"
 #include "io/crsf_sensor.h"
@@ -666,6 +667,10 @@ void init(void)
     if (feature(FEATURE_TELEMETRY)) {
         telemetryInit();
     }
+#endif
+
+#ifdef USE_SIM_STREAM
+    simStreamInit();
 #endif
 
 #ifdef USE_SDCARD

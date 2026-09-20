@@ -62,6 +62,7 @@ typedef enum {
     /* 28 is left free: the Configurator already assigns it to the MassZero thermal
      * camera, whose firmware side is not on this branch yet. */
     FUNCTION_ESC_SRXL2                  = (1 << 29), // 536870912: Spektrum Smart ESC (Smart Throttle)
+    FUNCTION_SIM_STREAM                 = (1 << 30), // 1073741824: high-rate simulator stream
 } serialPortFunction_e;
 
 #define FUNCTION_VTX_MSP FUNCTION_MSP_OSD

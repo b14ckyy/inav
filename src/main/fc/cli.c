@@ -97,6 +97,7 @@ bool cliMode = false;
 #include "io/osd/custom_elements.h"
 #include "io/motor_srxl2.h"
 #include "io/serial.h"
+#include "io/sim_stream.h"
 
 #include "fc/fc_msp_box.h"
 
@@ -4854,6 +4855,60 @@ static void cliMsc(char *cmdline)
 }
 #endif
 
+#ifdef USE_SIM_STREAM
+static const char * const simStreamTypeNames[SIM_STREAM_RX_TYPE_COUNT] = {
+    "IMU", "MAG", "BARO", "GPS", "RANGE", "POWER", "RC", "CONTROL"
+};
+
+static const char * const simStreamTxNames[SIM_STREAM_TX_TYPE_COUNT] = {
+    "MOTOR", "SERVO", "STATUS", "STATS"
+};
+
+static void cliSimStream(char *cmdline)
+{
+    if (sl_strcasecmp(cmdline, "reset") == 0) {
+        simStreamResetCounters();
+        cliPrintLine("simstream counters reset");
+        return;
+    }
+
+    simStreamStatus_t status;
+    simStreamGetStatus(&status);
+    const simStreamStats_t *stats = simStreamGetStats();
+
+    if (status.portIdentifier == SERIAL_PORT_NONE) {
+        cliPrintLine("port: none");
+        return;
+    }
+
+    cliPrintLinef("port: %d baud: %lu", status.portIdentifier, (unsigned long)status.baud);
+    cliPrintLinef("active: %s flags: 0x%04X imu_rate_hz: %u divisor: %u timeout_ms: %u",
+        status.active ? "yes" : "no", status.controlFlags, status.imuRateHz,
+        status.returnDivisor, status.timeoutMs);
+
+    cliPrintLine("type      received      lost   gaps   crc");
+    for (int i = 0; i < SIM_STREAM_RX_TYPE_COUNT; i++) {
+        const simStreamTypeStats_t *rx = &stats->rx[i];
+        cliPrintLinef("%-8s %9lu %9lu %6lu %5lu", simStreamTypeNames[i],
+            (unsigned long)rx->received, (unsigned long)rx->lost,
+            (unsigned long)rx->gapEvents, (unsigned long)rx->crcErrors);
+    }
+
+    const uint32_t minGapUs = (stats->imuGapMinUs == UINT32_MAX) ? 0 : stats->imuGapMinUs;
+    cliPrintLinef("imu gap us: min %lu median %lu p95 %lu max %lu",
+        (unsigned long)minGapUs, (unsigned long)simStreamGapPercentileUs(50),
+        (unsigned long)simStreamGapPercentileUs(95), (unsigned long)stats->imuGapMaxUs);
+    cliPrintLinef("imu late (>%u us): %lu timeouts: %lu", SIM_STREAM_LATE_GAP_US,
+        (unsigned long)stats->imuLateFrames, (unsigned long)stats->timeouts);
+    cliPrintLinef("resync bytes: %lu unknown frames: %lu tx dropped: %lu",
+        (unsigned long)stats->resyncBytes, (unsigned long)stats->unknownFrames,
+        (unsigned long)stats->txDropped);
+
+    for (int i = 0; i < SIM_STREAM_TX_TYPE_COUNT; i++) {
+        cliPrintLinef("tx %-6s %lu", simStreamTxNames[i], (unsigned long)stats->txFrames[i]);
+    }
+}
+#endif
 
 typedef struct {
     const char *name;
@@ -5130,6 +5185,9 @@ const clicmd_t cmdTable[] = {
     CLI_COMMAND_DEF("serialpassthrough", "passthrough serial data to port", "<id> [baud] [mode] [options]: passthrough to serial", cliSerialPassthrough),
 #endif
     CLI_COMMAND_DEF("servo", "configure servos", NULL, cliServo),
+#ifdef USE_SIM_STREAM
+    CLI_COMMAND_DEF("simstream", "simulator stream counters", "[reset]", cliSimStream),
+#endif
 #ifdef USE_PROGRAMMING_FRAMEWORK
     CLI_COMMAND_DEF("logic", "configure logic conditions",
         "<rule> <enabled> <activatorId> <operation> <operand A type> <operand A value> <operand B type> <operand B value> <flags>\r\n"

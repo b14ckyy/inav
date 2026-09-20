@@ -394,6 +394,15 @@
 #ifndef USE_SIMULATOR
 #define USE_SIMULATOR
 #endif
+
+// High-rate simulator stream on a serial port. Only for MCUs with at least 512 kB RAM
+// and 1 MB flash: F722 and F405 are at their ceilings, the AT32F43x linker map has 192 kB RAM.
+#if defined(STM32H7) || defined(STM32F765xx) || defined(SITL_BUILD)
+#ifndef USE_SIM_STREAM
+#define USE_SIM_STREAM
+#endif
+#endif
+
 #ifndef USE_PITOT_VIRTUAL
 #define USE_PITOT_VIRTUAL
 #endif
