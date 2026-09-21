@@ -612,6 +612,9 @@ bool osdItemIsFixed(osd_items_e item);
 uint8_t osdIncElementIndex(uint8_t elementIndex);
 
 displayPort_t *osdGetDisplayPort(void);
+#ifdef USE_SIM_STREAM
+void osdSetDisplayPort(displayPort_t *port);
+#endif
 displayCanvas_t *osdGetDisplayPortCanvas(void);
 
 int16_t osdGetHeading(void);

@@ -39,6 +39,7 @@
 struct serialPort_s;
 
 #define SIM_STREAM_MAX_PAYLOAD          64
+#define SIM_STREAM_OSD_RUN_PAYLOAD_MAX  128
 #define SIM_STREAM_GAP_BINS             64
 #define SIM_STREAM_GAP_BIN_US           50
 #define SIM_STREAM_LATE_GAP_US          1500
@@ -70,6 +71,8 @@ typedef enum {
     SIM_STREAM_TX_STATS,
     SIM_STREAM_TX_NAV,
     SIM_STREAM_TX_ARMING,
+    SIM_STREAM_TX_OSD_RUN,
+    SIM_STREAM_TX_OSD_SCREEN,
     SIM_STREAM_TX_TYPE_COUNT
 } simStreamTxType_e;
 
@@ -149,6 +152,17 @@ void simStreamAttachPostProcess(struct serialPort_s *port);
 bool simStreamGpsPoll(simStreamGpsFrame_t *fix);
 bool simStreamGetVoltage(uint16_t *milliVolts);
 bool simStreamGetAmperage(uint16_t *centiAmps);
+
+#ifdef USE_OSD
+/* The stream OSD driver asks whether the simulator wants the picture and watches the two epochs
+ * for the control-flag edges that ask for a full frame. */
+bool simStreamOsdWanted(void);
+uint32_t simStreamOsdEnableEpoch(void);
+uint32_t simStreamOsdRedrawEpoch(void);
+uint32_t simStreamOsdTxBytesFree(void);
+bool simStreamOsdSendRun(const uint8_t *payload, uint8_t len);
+bool simStreamOsdSendScreen(const uint8_t *payload, uint8_t len);
+#endif
 
 void simStreamResetCounters(void);
 const simStreamStats_t *simStreamGetStats(void);

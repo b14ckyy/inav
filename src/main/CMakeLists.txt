@@ -578,6 +578,8 @@ main_sources(COMMON_SRC
     io/displayport_oled.h
     io/displayport_msp_osd.c
     io/displayport_msp_osd.h
+    io/displayport_stream_osd.c
+    io/displayport_stream_osd.h
     io/displayport_srxl.c
     io/displayport_srxl.h
     io/displayport_hott.c

@@ -4861,7 +4861,7 @@ static const char * const simStreamTypeNames[SIM_STREAM_RX_TYPE_COUNT] = {
 };
 
 static const char * const simStreamTxNames[SIM_STREAM_TX_TYPE_COUNT] = {
-    "MOTOR", "SERVO", "STATUS", "STATS", "NAV", "ARMING"
+    "MOTOR", "SERVO", "STATUS", "STATS", "NAV", "ARMING", "OSDRUN", "OSDSCR"
 };
 
 static const char * const simStreamStateNames[] = {

@@ -4815,6 +4815,22 @@ static void osdSetNextRefreshIn(uint32_t timeMs)
     refreshWaitForResumeCmdRelease = true;
 }
 
+// everything the OSD caches from its display port, so a port change can re-read all of it
+static bool osdCacheDisplayPortState(displayFontMetadata_t *metadata)
+{
+#if defined(USE_CANVAS)
+    if (osdConfig()->force_grid) {
+        osdDisplayHasCanvas = false;
+    } else {
+        osdDisplayHasCanvas = displayGetCanvas(&osdCanvas, osdDisplayPort);
+    }
+#endif
+
+    const bool fontHasMetadata = displayGetFontMetadata(metadata, osdDisplayPort);
+    hasExtendedFont = fontHasMetadata && (metadata->charCount > 256);
+    return fontHasMetadata;
+}
+
 static void osdCompleteAsyncInitialization(void)
 {
     if (!displayIsReady(osdDisplayPort)) {
@@ -4827,26 +4843,16 @@ static void osdCompleteAsyncInitialization(void)
 
     osdDisplayIsReady = true;
 
-#if defined(USE_CANVAS)
-    if (osdConfig()->force_grid) {
-        osdDisplayHasCanvas = false;
-    } else {
-        osdDisplayHasCanvas = displayGetCanvas(&osdCanvas, osdDisplayPort);
-    }
-#endif
-
     displayBeginTransaction(osdDisplayPort, DISPLAY_TRANSACTION_OPT_RESET_DRAWING);
     displayClearScreen(osdDisplayPort);
 
     uint8_t y = 1;
     displayFontMetadata_t metadata;
-    bool fontHasMetadata = displayGetFontMetadata(&metadata, osdDisplayPort);
+    bool fontHasMetadata = osdCacheDisplayPortState(&metadata);
     LOG_DEBUG(OSD, "Font metadata version %s: %u (%u chars)",
         fontHasMetadata ? "Y" : "N", metadata.version, metadata.charCount);
 
     if (fontHasMetadata && metadata.charCount > 256) {
-        hasExtendedFont = true;
-
         y = drawLogos(false, y);
         y++;
     } else if (!fontHasMetadata) {
@@ -6153,6 +6159,28 @@ displayPort_t *osdGetDisplayPort(void)
 {
     return osdDisplayPort;
 }
+
+#ifdef USE_SIM_STREAM
+// hands the OSD to another device at runtime, without going through the boot splash again
+void osdSetDisplayPort(displayPort_t *port)
+{
+    if (!port || (port == osdDisplayPort)) {
+        return;
+    }
+
+    osdDisplayPort = port;
+#ifdef USE_CMS
+    cmsDisplayPortRegister(osdDisplayPort);
+#endif
+
+    displayFontMetadata_t metadata;
+    osdCacheDisplayPortState(&metadata);
+
+    displayClearScreen(osdDisplayPort);
+    displayResync(osdDisplayPort);
+    osdStartFullRedraw();
+}
+#endif
 
 displayCanvas_t *osdGetDisplayPortCanvas(void)
 {

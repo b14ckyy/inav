@@ -44,6 +44,12 @@
 #include "io/serial.h"
 #include "io/sim_stream.h"
 
+#ifdef USE_OSD
+#include "drivers/display.h"
+#include "io/displayport_stream_osd.h"
+#include "io/osd.h"
+#endif
+
 #include "msp/msp_serial.h"
 
 #include "navigation/navigation.h"
@@ -100,6 +106,8 @@
 #define SIM_STREAM_FRAME_STATUS         0x83
 #define SIM_STREAM_FRAME_NAV            0x84
 #define SIM_STREAM_FRAME_STATS          0x85
+#define SIM_STREAM_FRAME_OSD_RUN        0x86
+#define SIM_STREAM_FRAME_OSD_SCREEN     0x87
 #define SIM_STREAM_FRAME_ARMING         0x88
 
 #define SIM_STREAM_CONTROL_VERSION      1
@@ -114,6 +122,8 @@
 #define SIM_STREAM_CONTROL_RC           (1 << 7)
 #define SIM_STREAM_CONTROL_NAV          (1 << 8)
 #define SIM_STREAM_CONTROL_PITOT        (1 << 9)
+#define SIM_STREAM_CONTROL_OSD          (1 << 10)
+#define SIM_STREAM_CONTROL_OSD_REDRAW   (1 << 11)
 #define SIM_STREAM_CONTROL_ARMING       (1 << 12)
 #define SIM_STREAM_DEFAULT_TIMEOUT_MS   100
 
@@ -134,7 +144,8 @@
 
 // 64 rather than the 37 bytes a full servo frame needs, because STATS is 60
 #define SIM_STREAM_TX_PAYLOAD_MAX       64
-#define SIM_STREAM_TX_FRAME_MAX         (SIM_STREAM_FRAME_OVERHEAD + SIM_STREAM_TX_PAYLOAD_MAX)
+// only the frame assembly buffer grows for the OSD runs; the rx parser stays at 64
+#define SIM_STREAM_TX_FRAME_MAX         (SIM_STREAM_FRAME_OVERHEAD + SIM_STREAM_OSD_RUN_PAYLOAD_MAX)
 
 // The parser runs in the UART interrupt (boards) or in the TCP receive thread (SITL) while the
 // PID loop reads what it produced, so everything shared between them is published under a seqlock.
@@ -299,6 +310,14 @@ static struct {
 static simStreamSaved_t saved;
 static simStreamSessionState_e sessionState = SIM_STREAM_SESSION_IDLE;
 static uint16_t sessionFlags = 0;
+
+#ifdef USE_OSD
+static uint16_t osdControlFlags = 0;    // the live CONTROL word, so bits 10 and 11 can be edge-detected
+static bool osdWanted = false;
+static uint32_t osdEnableEpoch = 0;
+static uint32_t osdRedrawEpoch = 0;
+static displayPort_t *osdSavedPort = NULL;
+#endif
 
 static uint8_t txSeq[SIM_STREAM_TX_TYPE_COUNT];
 static uint16_t motorDivider = 0;
@@ -835,6 +854,52 @@ static void simStreamSetSensorPresence(uint32_t sensorBit, cfTaskId_e taskId, bo
     setTaskEnabled(taskId, present);
 }
 
+#ifdef USE_OSD
+static void simStreamOsdTrackFlags(uint16_t flags)
+{
+    const uint16_t rising = (uint16_t)(flags & ~osdControlFlags);
+
+    osdControlFlags = flags;
+    osdWanted = (flags & SIM_STREAM_CONTROL_OSD) != 0;
+
+    if (rising & SIM_STREAM_CONTROL_OSD) {
+        osdEnableEpoch++;
+    }
+    if (rising & SIM_STREAM_CONTROL_OSD_REDRAW) {
+        osdRedrawEpoch++;
+    }
+}
+
+static void simStreamOsdAttach(void)
+{
+    displayPort_t *current = osdGetDisplayPort();
+
+    // no port means the OSD never initialised, so there is nothing to hand over
+    if (!feature(FEATURE_OSD) || !current) {
+        return;
+    }
+
+    displayPort_t *streamPort = streamOsdDisplayPortInit(osdConfig()->video_system);
+    if (!streamPort || (current == streamPort)) {
+        return;
+    }
+
+    osdSavedPort = current;
+    displayClearScreen(osdSavedPort);
+    osdSetDisplayPort(streamPort);
+}
+
+static void simStreamOsdDetach(void)
+{
+    if (!osdSavedPort) {
+        return;
+    }
+
+    osdSetDisplayPort(osdSavedPort);
+    osdSavedPort = NULL;
+}
+#endif
+
 static bool simStreamSessionStart(const simStreamControl_t *ctl)
 {
     // the IMU is the heartbeat of a session; without it there is nothing to fly on
@@ -952,6 +1017,13 @@ static bool simStreamSessionStart(const simStreamControl_t *ctl)
     timeoutActive = false;
     timeoutTripped = false;
 
+#ifdef USE_OSD
+    // a fresh session takes an already set bit 10 as a rising edge
+    osdControlFlags = 0;
+    simStreamOsdTrackFlags(ctl->flags);
+    simStreamOsdAttach();
+#endif
+
     rebootArmed = false;
     sessionState = SIM_STREAM_SESSION_CALIBRATING;
     return true;
@@ -1009,6 +1081,12 @@ static void simStreamSessionStop(void)
     } else {
         DISABLE_STATE(COMPASS_CALIBRATED);
     }
+
+#ifdef USE_OSD
+    simStreamOsdDetach();
+    osdControlFlags = 0;
+    osdWanted = false;
+#endif
 
     sessionFlags = 0;
     sessionState = SIM_STREAM_SESSION_IDLE;
@@ -1118,6 +1196,52 @@ static bool simStreamWriteFrame(uint8_t type, simStreamTxType_e txType, const ui
     stats.txFrames[txType]++;
     return true;
 }
+
+#ifdef USE_OSD
+/* The OSD task runs cooperatively with the PID loop, so an OSD frame only needs its own batch:
+ * it can never land inside the batch the PID loop opens. */
+static bool simStreamWriteFrameStandalone(uint8_t type, simStreamTxType_e txType, const uint8_t *payload, uint8_t len)
+{
+    if (!simPort) {
+        return false;
+    }
+
+    serialBeginWrite(simPort);
+    const bool sent = simStreamWriteFrame(type, txType, payload, len);
+    serialEndWrite(simPort);
+    return sent;
+}
+
+bool simStreamOsdWanted(void)
+{
+    return simPort && (sessionState != SIM_STREAM_SESSION_IDLE) && osdWanted;
+}
+
+uint32_t simStreamOsdEnableEpoch(void)
+{
+    return osdEnableEpoch;
+}
+
+uint32_t simStreamOsdRedrawEpoch(void)
+{
+    return osdRedrawEpoch;
+}
+
+uint32_t simStreamOsdTxBytesFree(void)
+{
+    return simPort ? serialTxBytesFree(simPort) : 0;
+}
+
+bool simStreamOsdSendRun(const uint8_t *payload, uint8_t len)
+{
+    return simStreamWriteFrameStandalone(SIM_STREAM_FRAME_OSD_RUN, SIM_STREAM_TX_OSD_RUN, payload, len);
+}
+
+bool simStreamOsdSendScreen(const uint8_t *payload, uint8_t len)
+{
+    return simStreamWriteFrameStandalone(SIM_STREAM_FRAME_OSD_SCREEN, SIM_STREAM_TX_OSD_SCREEN, payload, len);
+}
+#endif
 
 static void simStreamPutU16(uint8_t *dst, uint16_t value)
 {
@@ -1351,6 +1475,12 @@ void simStreamOnPidLoop(void)
         serialEndWrite(simPort);
         simStreamSessionStop();
     }
+
+#ifdef USE_OSD
+    if (sessionState != SIM_STREAM_SESSION_IDLE) {
+        simStreamOsdTrackFlags(ctl.flags);
+    }
+#endif
 
     serialBeginWrite(simPort);
 
