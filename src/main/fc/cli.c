@@ -4857,11 +4857,15 @@ static void cliMsc(char *cmdline)
 
 #ifdef USE_SIM_STREAM
 static const char * const simStreamTypeNames[SIM_STREAM_RX_TYPE_COUNT] = {
-    "IMU", "MAG", "BARO", "GPS", "RANGE", "POWER", "RC", "CONTROL"
+    "IMU", "MAG", "BARO", "GPS", "RANGE", "POWER", "RC", "PITOT", "CONTROL"
 };
 
 static const char * const simStreamTxNames[SIM_STREAM_TX_TYPE_COUNT] = {
-    "MOTOR", "SERVO", "STATUS", "STATS"
+    "MOTOR", "SERVO", "STATUS", "STATS", "NAV", "ARMING"
+};
+
+static const char * const simStreamStateNames[] = {
+    "idle", "calibrating", "running"
 };
 
 static void cliSimStream(char *cmdline)
@@ -4881,10 +4885,14 @@ static void cliSimStream(char *cmdline)
         return;
     }
 
-    cliPrintLinef("port: %d baud: %lu", status.portIdentifier, (unsigned long)status.baud);
-    cliPrintLinef("active: %s flags: 0x%04X imu_rate_hz: %u divisor: %u timeout_ms: %u",
-        status.active ? "yes" : "no", status.controlFlags, status.imuRateHz,
-        status.returnDivisor, status.timeoutMs);
+    cliPrintLinef("port: %d baud: %lu (%s)", status.portIdentifier, (unsigned long)status.baud,
+        status.attached ? "attached" : "assigned");
+    if (status.rebootPending) {
+        cliPrintLinef("reboot in: %lu ms", (unsigned long)status.rebootInMs);
+    }
+    cliPrintLinef("session: %s flags: 0x%04X imu_rate_hz: %u timeout_ms: %u",
+        simStreamStateNames[status.sessionState], status.controlFlags, status.imuRateHz,
+        status.timeoutMs);
 
     cliPrintLine("type      received      lost   gaps   crc");
     for (int i = 0; i < SIM_STREAM_RX_TYPE_COUNT; i++) {

@@ -105,6 +105,7 @@
 #include "io/vtx_string.h"
 #include "io/gps_private.h"  //for MSP_SIMULATOR
 #include "io/headtracker_msp.h"
+#include "io/sim_stream.h"
 
 #include "io/osd/custom_elements.h"
 
@@ -269,6 +270,21 @@ static void mspFcSetPassthroughCommand(sbuf_t *dst, sbuf_t *src, mspPostProcessF
         sbufWriteU8(dst, 0);
     }
 }
+
+#ifdef USE_SIM_STREAM
+static void mspFcSimStreamAttachCommand(sbuf_t *dst, sbuf_t *src, mspPostProcessFnPtr *mspPostProcessFn)
+{
+    uint32_t baud = 0;
+    sbufReadU32Safe(&baud, src);        // 0 keeps the port's baud; the trailing flags byte is reserved
+
+    const uint8_t result = simStreamAttachRequest(baud);
+    sbufWriteU8(dst, result);
+
+    if ((result == SIM_STREAM_ATTACH_OK) && mspPostProcessFn) {
+        *mspPostProcessFn = simStreamAttachPostProcess;
+    }
+}
+#endif
 
 static void mspRebootNormalFn(serialPort_t *serialPort)
 {
@@ -5221,6 +5237,11 @@ mspResult_e mspFcProcessCommand(mspPacket_t *cmd, mspPacket_t *reply, mspPostPro
     } else if (cmdMSP == MSP_SET_PASSTHROUGH) {
         mspFcSetPassthroughCommand(dst, src, mspPostProcessFn);
         ret = MSP_RESULT_ACK;
+#ifdef USE_SIM_STREAM
+    } else if (cmdMSP == MSP2_INAV_SIM_STREAM_ATTACH) {
+        mspFcSimStreamAttachCommand(dst, src, mspPostProcessFn);
+        ret = MSP_RESULT_ACK;
+#endif
     } else if (cmdMSP == MSP_REBOOT) {
         if (!ARMING_FLAG(ARMED)) {
             ret = mspFcRebootCommand(src, mspPostProcessFn);

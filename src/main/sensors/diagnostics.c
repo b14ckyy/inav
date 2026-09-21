@@ -62,7 +62,7 @@ hardwareSensorStatus_e getHwCompassStatus(void)
 {
 #if defined(USE_MAG)
 #ifdef USE_SIMULATOR
-    if ((ARMING_FLAG(SIMULATOR_MODE_HITL) || ARMING_FLAG(SIMULATOR_MODE_SITL)) && sensors(SENSOR_MAG)) {
+    if ((ARMING_FLAG(SIMULATOR_MODE_HITL) || ARMING_FLAG(SIMULATOR_MODE_SITL) || SIM_STREAM_ACTIVE()) && sensors(SENSOR_MAG)) {
         if (compassIsHealthy()) {
             return HW_SENSOR_OK;
         } else {
@@ -94,7 +94,7 @@ hardwareSensorStatus_e getHwBarometerStatus(void)
 {
 #if defined(USE_BARO)
 #ifdef USE_SIMULATOR
-    if (ARMING_FLAG(SIMULATOR_MODE_HITL) || ARMING_FLAG(SIMULATOR_MODE_SITL)) {
+    if (ARMING_FLAG(SIMULATOR_MODE_HITL) || ARMING_FLAG(SIMULATOR_MODE_SITL) || SIM_STREAM_ACTIVE()) {
         if (requestedSensors[SENSOR_INDEX_BARO] == BARO_NONE) {
             return HW_SENSOR_NONE;
         } else if (baroIsHealthy()) {

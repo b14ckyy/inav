@@ -30,6 +30,9 @@ typedef enum disarmReason_e {
     DISARM_FAILSAFE     = 6,
     DISARM_NAVIGATION   = 7,
     DISARM_LANDING      = 8,
+#ifdef USE_SIM_STREAM
+    DISARM_SIM_STREAM   = 9,
+#endif
     DISARM_REASON_COUNT
 } disarmReason_t;
 

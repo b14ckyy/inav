@@ -582,7 +582,7 @@ void accUpdate(void)
         DEBUG_SET(DEBUG_ACC, axis, accADC[axis]);
     }
 
-    if (!ARMING_FLAG(SIMULATOR_MODE_SITL)) {
+    if (!ARMING_FLAG(SIMULATOR_MODE_SITL) && !SIM_STREAM_ACTIVE()) {
         performAcclerationCalibration();
         applyAccelerationZero();
     }
@@ -664,7 +664,7 @@ bool accIsClipped(void)
 
 void accSetCalibrationValues(void)
 {
-    if (!ARMING_FLAG(SIMULATOR_MODE_SITL) &&
+    if (!ARMING_FLAG(SIMULATOR_MODE_SITL) && !SIM_STREAM_ACTIVE() &&
         ((accelerometerConfig()->accZero.raw[X] == 0) && (accelerometerConfig()->accZero.raw[Y] == 0) && (accelerometerConfig()->accZero.raw[Z] == 0) &&
         (accelerometerConfig()->accGain.raw[X] == 4096) && (accelerometerConfig()->accGain.raw[Y] == 4096) &&(accelerometerConfig()->accGain.raw[Z] == 4096))) {
         DISABLE_STATE(ACCELEROMETER_CALIBRATED);

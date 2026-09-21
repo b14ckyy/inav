@@ -112,6 +112,10 @@ typedef struct gyroConfig_s {
 PG_DECLARE(gyroConfig_t, gyroConfig);
 
 bool gyroInit(void);
+#ifdef USE_SIM_STREAM
+struct gyroDev_s;
+struct gyroDev_s *gyroGetPrimaryDevice(void);
+#endif
 void gyroGetMeasuredRotationRate(fpVector3_t *imuMeasuredRotationBF);
 void gyroUpdate(void);
 void gyroFilter(void);

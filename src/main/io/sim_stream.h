@@ -23,8 +23,9 @@
 #ifdef USE_SIM_STREAM
 
 /*
- * High-rate simulator stream, transport test stage: the frames are parsed, counted and
- * answered, but nothing is injected into the sensor stack and nothing touches arming.
+ * High-rate simulator stream: while a session is active the module owns INAV's sensor
+ * devices, so calibration, alignment, filters, AHRS and navigation run on the stream
+ * exactly as they run on real hardware. Motor and servo outputs go to the simulator.
  *
  * The pilot assigns the port on the CLI; the stream cannot share a port with any other
  * function, and its baud rate is the peripheral one (the last of the four baud columns):
@@ -35,10 +36,19 @@
  * Both forms work; the second only adds bit 30 to whatever the port already had.
  */
 
+struct serialPort_s;
+
 #define SIM_STREAM_MAX_PAYLOAD          64
 #define SIM_STREAM_GAP_BINS             64
 #define SIM_STREAM_GAP_BIN_US           50
 #define SIM_STREAM_LATE_GAP_US          1500
+#define SIM_STREAM_RC_MAX_CHANNELS      16
+
+// MSP2_INAV_SIM_STREAM_ATTACH reply codes
+#define SIM_STREAM_ATTACH_OK            0
+#define SIM_STREAM_ATTACH_ARMED         1
+#define SIM_STREAM_ATTACH_PORT_IN_USE   2
+#define SIM_STREAM_ATTACH_BAD_BAUD      3
 
 typedef enum {
     SIM_STREAM_RX_IMU = 0,
@@ -48,6 +58,7 @@ typedef enum {
     SIM_STREAM_RX_RANGE,
     SIM_STREAM_RX_POWER,
     SIM_STREAM_RX_RC,
+    SIM_STREAM_RX_PITOT,
     SIM_STREAM_RX_CONTROL,
     SIM_STREAM_RX_TYPE_COUNT
 } simStreamRxType_e;
@@ -57,8 +68,16 @@ typedef enum {
     SIM_STREAM_TX_SERVO,
     SIM_STREAM_TX_STATUS,
     SIM_STREAM_TX_STATS,
+    SIM_STREAM_TX_NAV,
+    SIM_STREAM_TX_ARMING,
     SIM_STREAM_TX_TYPE_COUNT
 } simStreamTxType_e;
+
+typedef enum {
+    SIM_STREAM_SESSION_IDLE = 0,
+    SIM_STREAM_SESSION_CALIBRATING,
+    SIM_STREAM_SESSION_RUNNING
+} simStreamSessionState_e;
 
 typedef struct {
     uint32_t received;
@@ -86,15 +105,50 @@ typedef struct {
     int8_t portIdentifier;          // SERIAL_PORT_NONE when the feature is built in but unassigned
     uint32_t baud;
     bool active;
+    uint8_t sessionState;
     uint16_t controlFlags;
     uint16_t imuRateHz;
     uint16_t timeoutMs;
-    uint8_t returnDivisor;
+    bool attached;                  // port taken over at runtime instead of assigned in the serial config
+    bool rebootPending;
+    uint32_t rebootInMs;
 } simStreamStatus_t;
+
+// one GPS fix as the wire carries it, in INAV's own units
+typedef struct {
+    uint8_t fixType;
+    uint8_t numSat;
+    int32_t lat;                    // 1e-7 degrees
+    int32_t lon;                    // 1e-7 degrees
+    int32_t alt;                    // cm MSL
+    int16_t velNED[3];              // cm/s
+    uint16_t groundSpeed;           // cm/s
+    uint16_t groundCourse;          // 0.1 degrees
+    uint16_t hdop;                  // * 100
+    uint16_t eph;                   // cm
+    uint16_t epv;                   // cm
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+    uint8_t hours;
+    uint8_t minutes;
+    uint8_t seconds;
+    uint16_t millis;
+} simStreamGpsFrame_t;
 
 void simStreamInit(void);
 void simStreamPoll(void);
 void simStreamOnPidLoop(void);
+
+/* Runtime attach: the MSP handler asks first, then hands the port over from the MSP post-process
+ * hook so the reply still leaves through the MSP framing. */
+uint8_t simStreamAttachRequest(uint32_t baud);
+void simStreamAttachPostProcess(struct serialPort_s *port);
+
+// consumed by the GPS task: true when a fix arrived that has not been handed over yet
+bool simStreamGpsPoll(simStreamGpsFrame_t *fix);
+bool simStreamGetVoltage(uint16_t *milliVolts);
+bool simStreamGetAmperage(uint16_t *centiAmps);
 
 void simStreamResetCounters(void);
 const simStreamStats_t *simStreamGetStats(void);

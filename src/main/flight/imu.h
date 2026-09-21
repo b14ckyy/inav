@@ -81,6 +81,9 @@ void imuConfigure(void);
 
 void imuSetMagneticDeclination(float declinationDeg);
 void imuUpdateAttitude(timeUs_t currentTimeUs);
+#ifdef USE_SIM_STREAM
+void imuResetForNewSession(timeUs_t currentTimeUs);
+#endif
 void imuUpdateAccelerometer(void);
 float calculateCosTiltAngle(void);
 bool isImuReady(void);

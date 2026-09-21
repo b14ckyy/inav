@@ -219,6 +219,11 @@ int getServoCount(void)
     }
 }
 
+int getServoMaxIndex(void)
+{
+    return mixerUsesServos ? maxServoIndex : -1;
+}
+
 void loadCustomServoMixer(void)
 {
 

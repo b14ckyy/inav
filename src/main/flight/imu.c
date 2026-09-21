@@ -106,6 +106,14 @@ FASTRAM float rMat[3][3];
 STATIC_FASTRAM imuRuntimeConfig_t imuRuntimeConfig;
 
 STATIC_FASTRAM pt1Filter_t rotRateFilter[XYZ_AXIS_COUNT];
+
+#ifdef USE_SIM_STREAM
+// only a simulator session has to restart the estimator, so these leave their functions for it
+STATIC_FASTRAM fpVector3_t vGyroDriftEstimate = { 0 };
+static uint8_t prevOrientationSnapshotCount = 0;
+static fpQuaternion_t prevOrientation = { .q0 = 1.0f };  // identity quaternion safe default
+static timeUs_t previousIMUUpdateTimeUs;
+#endif
 FASTRAM fpVector3_t imuMeasuredRotationBFFiltered = {.v = {0.0f, 0.0f, 0.0f}};
 
 STATIC_FASTRAM pt1Filter_t accelFilter[XYZ_AXIS_COUNT];
@@ -371,15 +379,19 @@ static float imuCalculateMcCogAccWeight(void)
 
 static RP2350_FAST_CODE void imuMahonyAHRSupdate(float dt, const fpVector3_t * gyroBF, const fpVector3_t * accBF, const fpVector3_t * magBF, const fpVector3_t * vCOG, const fpVector3_t * vCOGAcc, float accWScaler, float magWScaler)
 {
+#ifndef USE_SIM_STREAM
     STATIC_FASTRAM fpVector3_t vGyroDriftEstimate = { 0 };
+#endif
 
     /* Opt 5: snapshot prevOrientation every 100 PID cycles instead of every cycle.
      * The snapshot is only used by the fault-recovery path in
      * imuCheckAndResetOrientationQuaternion(), which should never fire in normal
      * flight.  Copying 4 floats 1000×/s just to support a near-zero-probability
      * reset path is wasteful; 100 ms staleness is a safe recovery point. */
+#ifndef USE_SIM_STREAM
     static uint8_t prevOrientationSnapshotCount = 0;
     static fpQuaternion_t prevOrientation = { .q0 = 1.0f };  // identity quaternion safe default
+#endif
     if (++prevOrientationSnapshotCount >= 100) {
         prevOrientationSnapshotCount = 0;
         prevOrientation = orientation;
@@ -935,7 +947,9 @@ void imuCheckVibrationLevels(void)
 void imuUpdateAttitude(timeUs_t currentTimeUs)
 {
     /* Calculate dT */
+#ifndef USE_SIM_STREAM
     static timeUs_t previousIMUUpdateTimeUs;
+#endif
     const float dT = (currentTimeUs - previousIMUUpdateTimeUs) * 1e-6;
     previousIMUUpdateTimeUs = currentTimeUs;
 
@@ -950,6 +964,26 @@ void imuUpdateAttitude(timeUs_t currentTimeUs)
         acc.accADCf[Z] = 0.0f;
     }
 }
+
+#ifdef USE_SIM_STREAM
+/* A simulator session takes the sensors over at an arbitrary attitude after an arbitrary pause,
+ * so the estimator restarts instead of integrating one step across the gap: a single rotation
+ * larger than sin_approx()'s 32 rad input limit collapses the quaternion to zero, which
+ * imuValidateQuaternion() accepts and quaternionMultiply() never leaves again. */
+void imuResetForNewSession(timeUs_t currentTimeUs)
+{
+    quaternionInitUnit(&orientation);
+    prevOrientation = orientation;
+    prevOrientationSnapshotCount = 0;
+    vGyroDriftEstimate.x = 0.0f;
+    vGyroDriftEstimate.y = 0.0f;
+    vGyroDriftEstimate.z = 0.0f;
+    previousIMUUpdateTimeUs = currentTimeUs;
+
+    imuComputeRotationMatrix();
+    imuUpdateEulerAngles();
+}
+#endif
 
 bool isImuReady(void)
 {

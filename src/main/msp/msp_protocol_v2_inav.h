@@ -165,3 +165,5 @@
 // command keeps its number, an unmerged one has no claim on it.
 #define MSP2_INAV_ESC_SRXL2_STATUS              0x2233
 #define MSP2_INAV_ESC_SRXL2_CALIBRATE           0x2234
+
+#define MSP2_INAV_SIM_STREAM_ATTACH             0x2240  //in message  re-purpose the MSP port this command arrives on for the simulator stream; payload: U32 baud (0 = keep), U8 flags (reserved)

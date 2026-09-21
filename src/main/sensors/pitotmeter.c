@@ -271,7 +271,7 @@ STATIC_PROTOTHREAD(pitotThread)
         pitot.dev.calculate(&pitot.dev, &pitotPressureTmp, &pitotTemperatureTmp);
 
 #if defined(USE_PITOT_FAKE)
-        if (detectedSensors[SENSOR_INDEX_PITOT] == PITOT_FAKE) {
+        if (detectedSensors[SENSOR_INDEX_PITOT] == PITOT_FAKE && !SIM_STREAM_ACTIVE()) {
             pitot.airSpeed = fakePitotGetAirspeed();
         }
 #endif
@@ -290,7 +290,7 @@ STATIC_PROTOTHREAD(pitotThread)
 
             // NOTE ::filter pressure - apply filter when NOT calibrating for zero !!!
             currentTimeUs = micros();
-            if (detectedSensors[SENSOR_INDEX_PITOT] != PITOT_FAKE) {
+            if (detectedSensors[SENSOR_INDEX_PITOT] != PITOT_FAKE || SIM_STREAM_ACTIVE()) {
                 if (pitotmeterConfig()->pitot_lpf_milli_hz) {
                     pitot.pressure = pt1FilterApply3(&pitot.lpfState, pitotPressureTmp, US2S(currentTimeUs - pitot.lastMeasurementUs));
                 } else {

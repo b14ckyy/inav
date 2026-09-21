@@ -446,8 +446,11 @@ void compassUpdate(timeUs_t currentTimeUs)
 #if defined(SITL_BUILD)
     ENABLE_STATE(COMPASS_CALIBRATED);
 #else
-    // Check magZero
-    if (
+    // Check magZero - the stored calibration belongs to the real mag, not to a streamed field
+    if (SIM_STREAM_ACTIVE()) {
+        ENABLE_STATE(COMPASS_CALIBRATED);
+    }
+    else if (
         compassConfig()->magZero.raw[X] == 0 && compassConfig()->magZero.raw[Y] == 0 && compassConfig()->magZero.raw[Z] == 0 &&
         compassConfig()->magGain[X] == 1024 && compassConfig()->magGain[Y] == 1024 && compassConfig()->magGain[Z] == 1024  
     ) {
@@ -554,7 +557,7 @@ void compassUpdate(timeUs_t currentTimeUs)
             saveConfigAndNotify();
         }
     }
-    else {
+    else if (!SIM_STREAM_ACTIVE()) {
         for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
             mag.magADC[axis] = (mag.magADC[axis] - compassConfig()->magZero.raw[axis]) * 1024 / compassConfig()->magGain[axis];
         }

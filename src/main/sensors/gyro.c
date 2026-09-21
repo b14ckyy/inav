@@ -373,6 +373,14 @@ static float gyroMovementThreshold(uint8_t index)
     return CALIBRATING_GYRO_MORON_THRESHOLD_DPS / gyroDev[index].scale;
 }
 
+#ifdef USE_SIM_STREAM
+// the simulator stream borrows the primary gyro's read function for the length of a session
+gyroDev_t *gyroGetPrimaryDevice(void)
+{
+    return &gyroDev[0];
+}
+#endif
+
 void gyroStartCalibration(void)
 {
     if (!gyro.initialized) {

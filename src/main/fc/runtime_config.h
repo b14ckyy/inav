@@ -34,7 +34,7 @@ typedef enum {
     ARMING_DISABLED_ARM_SWITCH                      = (1 << 14),
     ARMING_DISABLED_HARDWARE_FAILURE                = (1 << 15),
     ARMING_DISABLED_BOXFAILSAFE                     = (1 << 16),
-
+    SIMULATOR_MODE_STREAM                           = (1 << 17),
     ARMING_DISABLED_RC_LINK                         = (1 << 18),
     ARMING_DISABLED_THROTTLE                        = (1 << 19),
     ARMING_DISABLED_CLI                             = (1 << 20),
@@ -82,6 +82,14 @@ extern const char *armingDisableFlagNames[];
 #define DISABLE_ARMING_FLAG(mask)   (armingFlags &= ~(mask))
 #define ENABLE_ARMING_FLAG(mask)    (armingFlags |= (mask))
 #define ARMING_FLAG(mask)           (armingFlags & (mask))
+
+// Folds to a constant when the feature is not built in, so the HITL/SITL branches that have to
+// know about the stream can extend their condition without an #ifdef of their own.
+#ifdef USE_SIM_STREAM
+#define SIM_STREAM_ACTIVE()         (armingFlags & SIMULATOR_MODE_STREAM)
+#else
+#define SIM_STREAM_ACTIVE()         false
+#endif
 
 // Returns the 1st flag from ARMING_DISABLED_ALL_FLAGS which is
 // preventing arming, or zero if arming is not disabled.

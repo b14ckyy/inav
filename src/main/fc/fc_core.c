@@ -324,7 +324,7 @@ static void updateArmingStatus(void)
 #ifdef USE_SIMULATOR
         // Not while a simulator flies the aircraft: HITL disables the outputs itself, so
         // there is no motor to command and nothing this would protect
-        escLinkMissing = escLinkMissing && !ARMING_FLAG(SIMULATOR_MODE_HITL);
+        escLinkMissing = escLinkMissing && !ARMING_FLAG(SIMULATOR_MODE_HITL) && !SIM_STREAM_ACTIVE();
 #endif
 #endif
         if (!isHardwareHealthy() || escLinkMissing) {
@@ -1017,7 +1017,7 @@ void taskMainPidLoop(timeUs_t currentTimeUs)
     }
 
 #if defined(SITL_BUILD)
-    if (ARMING_FLAG(SIMULATOR_MODE_HITL) || lockMainPID()) {
+    if (ARMING_FLAG(SIMULATOR_MODE_HITL) || SIM_STREAM_ACTIVE() || lockMainPID()) {
 #endif
 
     gyroFilter();
@@ -1070,7 +1070,8 @@ void taskMainPidLoop(timeUs_t currentTimeUs)
     //Servos should be filtered or written only when mixer is using servos or special feaures are enabled
 
 #ifdef USE_SIMULATOR
-    if (!ARMING_FLAG(SIMULATOR_MODE_HITL)) {
+    // a streamed session drives the simulator, never the pads
+    if (!ARMING_FLAG(SIMULATOR_MODE_HITL) && !SIM_STREAM_ACTIVE()) {
         if (isServoOutputEnabled()) {
             writeServos();
         }

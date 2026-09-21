@@ -97,7 +97,8 @@ void applyTailSitterAlignment(fpVector3_t *fpVec)
 
 void applyBoardAlignment(float *vec)
 {
-    if (standardBoardAlignment && (!STATE(TAILSITTER))) {
+    // the simulator stream already delivers its vectors in INAV's body frame
+    if ((standardBoardAlignment && (!STATE(TAILSITTER))) || SIM_STREAM_ACTIVE()) {
         return;
     }
 

@@ -55,6 +55,7 @@
 #include "io/serial.h"
 #include "io/gps.h"
 #include "io/gps_private.h"
+#include "io/sim_stream.h"
 #include "io/gps_ublox.h"
 
 #include "navigation/navigation.h"
@@ -563,6 +564,49 @@ bool gpsUpdate(void)
             gpsSetState(GPS_RUNNING);
             sensorsSet(SENSOR_GPS);
         }
+        bool res = gpsSol.flags.hasNewData;
+        gpsSol.flags.hasNewData = false;
+        return res;
+    }
+#endif
+
+#if defined(USE_SIM_STREAM) && !defined(GPS_NULL_PORT_UNIT_TEST)
+    if (SIM_STREAM_ACTIVE()) {
+        simStreamGpsFrame_t streamFix;
+
+        if (simStreamGpsPoll(&streamFix)) {
+            gpsSetState(GPS_RUNNING);
+
+            gpsSolDRV.fixType = (gpsFixType_e)streamFix.fixType;
+            gpsSolDRV.numSat = streamFix.numSat;
+            gpsSolDRV.llh.lat = streamFix.lat;
+            gpsSolDRV.llh.lon = streamFix.lon;
+            gpsSolDRV.llh.alt = streamFix.alt;
+            gpsSolDRV.velNED[X] = streamFix.velNED[X];
+            gpsSolDRV.velNED[Y] = streamFix.velNED[Y];
+            gpsSolDRV.velNED[Z] = streamFix.velNED[Z];
+            gpsSolDRV.groundSpeed = (int16_t)streamFix.groundSpeed;
+            gpsSolDRV.groundCourse = (int16_t)streamFix.groundCourse;
+            gpsSolDRV.hdop = gpsConstrainHDOP(streamFix.hdop);
+            gpsSolDRV.eph = gpsConstrainEPE(streamFix.eph);
+            gpsSolDRV.epv = gpsConstrainEPE(streamFix.epv);
+            gpsSolDRV.flags.validVelNE = true;
+            gpsSolDRV.flags.validVelD = true;
+            gpsSolDRV.flags.validEPE = true;
+
+            gpsSolDRV.time.year = streamFix.year;
+            gpsSolDRV.time.month = streamFix.month;
+            gpsSolDRV.time.day = streamFix.day;
+            gpsSolDRV.time.hours = streamFix.hours;
+            gpsSolDRV.time.minutes = streamFix.minutes;
+            gpsSolDRV.time.seconds = streamFix.seconds;
+            gpsSolDRV.time.millis = streamFix.millis;
+            gpsSolDRV.flags.validTime = streamFix.fixType >= GPS_FIX_3D;
+
+            gpsProcessNewDriverData();
+            gpsProcessNewSolutionData(false);
+        }
+
         bool res = gpsSol.flags.hasNewData;
         gpsSol.flags.hasNewData = false;
         return res;

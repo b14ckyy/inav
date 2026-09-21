@@ -61,6 +61,7 @@
 #include "fc/rc_controls.h"
 
 #include "io/beeper.h"
+#include "io/sim_stream.h"
 
 #if defined(USE_FAKE_BATT_SENSOR)
 #include "sensors/battery_sensor_fake.h"
@@ -404,6 +405,13 @@ static void updateBatteryVoltage(timeUs_t timeDelta, bool justConnected)
     if (ARMING_FLAG(SIMULATOR_MODE_HITL) && SIMULATOR_HAS_OPTION(HITL_SIMULATE_BATTERY)) {
         vbat = ((uint16_t)simulatorData.vbat)*10;
         return;
+    }
+#endif
+
+#ifdef USE_SIM_STREAM
+    uint16_t streamMilliVolts;
+    if (simStreamGetVoltage(&streamMilliVolts)) {
+        vbat = streamMilliVolts / 10;
     }
 #endif
 
@@ -844,6 +852,13 @@ void currentMeterUpdate(timeUs_t timeDelta)
 #ifdef USE_SIMULATOR
     if (ARMING_FLAG(SIMULATOR_MODE_HITL) && SIMULATOR_HAS_OPTION(HITL_CURRENT_SENSOR)) {
         amperage = ((uint16_t)simulatorData.current) * 10;
+    }
+#endif
+
+#ifdef USE_SIM_STREAM
+    uint16_t streamCentiAmps;
+    if (simStreamGetAmperage(&streamCentiAmps)) {
+        amperage = (int16_t)streamCentiAmps;    // the stream's 10 mA unit is INAV's centiampere
     }
 #endif
 
