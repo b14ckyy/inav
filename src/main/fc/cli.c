@@ -238,7 +238,8 @@ static const char *debugModeNames[DEBUG_COUNT] = {
     "VTOL_MC_PROTECT",
     "TERRAIN_NAV",
     "ESC",
-    "FW_TURN"
+    "FW_TURN",
+    "MAG"
 };
 
 /* Sensor names (used in lookup tables for *_hardware settings and in status
@@ -2051,8 +2052,8 @@ static void cliWaypoints(char *cmdline)
 static void printLed(uint8_t dumpMask, const ledConfig_t *ledConfigs, const ledConfig_t *defaultLedConfigs)
 {
     const char *format = "led %u %s";
-    char ledConfigBuffer[20];
-    char ledConfigDefaultBuffer[20];
+    char ledConfigBuffer[LED_CONFIG_STRING_LENGTH];
+    char ledConfigDefaultBuffer[LED_CONFIG_STRING_LENGTH];
     for (uint32_t i = 0; i < LED_MAX_STRIP_LENGTH; i++) {
         ledConfig_t ledConfig = ledConfigs[i];
         generateLedConfig(&ledConfig, ledConfigBuffer, sizeof(ledConfigBuffer));
