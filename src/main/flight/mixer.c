@@ -624,8 +624,17 @@ void FAST_CODE mixTable(void)
 
     // Now add in the desired throttle, but keep in a range that doesn't clip adjusted
     // roll/pitch/yaw. This could move throttle down, but also up for those low throttle flips.
+    // FW emergency landing: no RPY on motors, differential thrust yaw must not lift one motor above the failsafe throttle
+    const bool fwEmergencyLanding = STATE(AIRPLANE) && !isMixerTransitionMixing && navigationIsExecutingAnEmergencyLanding();
+
     for (int i = 0; i < motorCount; i++) {
-        motor[i] = rpyMix[i] + constrain(mixerThrottleCommand * currentMixer[i].throttle, throttleMin, throttleMax);
+        const float motorThrottle = mixerThrottleCommand * currentMixer[i].throttle;
+
+        if (fwEmergencyLanding) {
+            motor[i] = constrain(motorThrottle, throttleRangeMin, throttleRangeMax);
+        } else {
+            motor[i] = rpyMix[i] + constrain(motorThrottle, throttleMin, throttleMax);
+        }
 
         if (failsafeIsActive()) {
             motor[i] = constrain(motor[i], motorConfig()->mincommand, getMaxThrottle());
