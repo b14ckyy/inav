@@ -137,6 +137,10 @@ typedef struct {
         float bankCmd;              // arc bank command [centideg], applied to roll while active
         float easeMs;               // ease time of the arc in progress, sizes the handback fade
         float pickupAlong;          // along-track distance to the second-arc pickup [cm], for the log
+        float entryAlt;             // altitude bridge through the turn: leg profile target at its start [cm]
+        float exitAlt;              // outbound leg profile at the last arc's tangent exit (FLY_INTO: the WP) [cm]
+        float pathTotal;            // path from engage to the bridge exit [cm]
+        float zFraction;            // flown share of the bridge, never decreasing so heading noise cannot pull the target back
         int32_t outBearing;
         int32_t prevLegBearing;     // last seen WP leg bearing [centideg] for leg-change detection (-1 = unseeded)
         uint8_t phase;
@@ -146,12 +150,14 @@ typedef struct {
         bool    engaged;            // arc latch across loops; a controller reset must clear it or a stale arc resumes
         bool    wasActive;          // arc drove the roll last frame, to catch the release edge
         bool    flyByCappedLatch;   // the pending FLY_BY turn hit the lead-time cap -> fly it direct, not as an arc
+        bool    zBridge;            // the arc owns the altitude target
     } arc;
     struct {                        // S sequencer: first arc, roll-reversal gap, second arc
         float ex, ey;               // second-arc pickup point (internal-tangent touch)
         float o2x, o2y;             // second-arc centre
         float r;
         float awayMs;               // time spent in the away arc, to bound a pickup that never triggers
+        float straightCm;           // FLY_OVER S: arc 1 exit to the pickup, caps the bridge's straight-line term
         int32_t bOut;
         uint8_t stage;
         int8_t  dir;
@@ -761,6 +767,7 @@ static void fwArcClampBankCmd(void)
 static void fwArcDebugRelease(void)
 {
     DEBUG_SET(DEBUG_FW_TURN, 1, 0);
+    DEBUG_SET(DEBUG_FW_TURN, 2, 0);
     DEBUG_SET(DEBUG_FW_TURN, 3, 0);
 }
 
@@ -797,6 +804,56 @@ static void fwArcEngageRampIn(const fwTurnPlan_t *plan, int8_t dir, float cx, fl
     fwTurn.arc.outBearing = outBearing;
     fwTurn.arc.phiNomCd = plan->phiNomCd;
     fwTurn.arc.tEaseMs = plan->tEaseMs;
+    fwTurn.arc.zBridge = false;
+}
+
+// Outbound leg profile at the tangent exit of the circle centred at (cx, cy) that leaves on outBearing
+static float fwLegProfileAtExit(float cx, float cy, int32_t outBearing)
+{
+    float ux, uy;
+    fwBearingUnit(outBearing, &ux, &uy);
+    // The tangent exit is the centre's foot on the exit course: both give the same along-track distance
+    const float alongToWp = constrainf((posControl.activeWaypoint.pos.x - cx) * ux
+                                       + (posControl.activeWaypoint.pos.y - cy) * uy,
+                                       0.0f, posControl.wpLegLength);
+    return posControl.activeWaypoint.pos.z
+           + (posControl.wpLegStartAlt - posControl.activeWaypoint.pos.z) * alongToWp / posControl.wpLegLength;
+}
+
+// Bridge the altitude target from the inbound profile to exitAlt over pathCm of flown path
+static void fwArcBridgeStart(float exitAlt, float pathCm)
+{
+    if (!posControl.wpProfileValid) {
+        return;
+    }
+
+    fwTurn.arc.entryAlt = posControl.wpProfileAltitude;
+    fwTurn.arc.exitAlt = exitAlt;
+    fwTurn.arc.pathTotal = MAX(pathCm, 1.0f);
+    fwTurn.arc.zFraction = 0.0f;
+    fwTurn.arc.zBridge = true;
+    DEBUG_SET(DEBUG_FW_TURN, 7, lrintf(exitAlt));
+}
+
+// Bridge over the engaged arc alone
+static void fwArcBridgeStartSingle(float exitAlt, int32_t cog)
+{
+    const float sweepCd = MAX((float)ABS(wrap_18000(fwTurn.arc.outBearing - cog)), (float)NAV_FW_ARC_MIN_TURN_ANGLE_CD);
+    fwArcBridgeStart(exitAlt, fwTurn.arc.r * CENTIDEGREES_TO_RADIANS(sweepCd));
+}
+
+static float fwArcBridgeTarget(void)
+{
+    return fwTurn.arc.entryAlt + (fwTurn.arc.exitAlt - fwTurn.arc.entryAlt) * fwTurn.arc.zFraction;
+}
+
+bool navFwTurnBridgeAltitude(float *targetZ)
+{
+    if (!fwTurn.arc.zBridge || !fwTurn.arc.engaged) {
+        return false;
+    }
+    *targetZ = fwArcBridgeTarget();
+    return true;
 }
 
 // No usable circle geometry left: capture the leg line itself with the bounded roll-out
@@ -805,6 +862,7 @@ static void fwArcCaptureToLeg(int32_t legBearing)
     fwTurn.arc.outBearing = legBearing;
     fwTurn.arc.toLegLine = true;
     fwTurn.arc.phase = ARC_CAPTURE;
+    fwTurn.arc.zBridge = false;         // no exit point known: the ramp keeps the target
 }
 
 // Stage the second arc of an S so the shared pickup logic can re-anchor and fly it
@@ -837,6 +895,7 @@ static float fwArcLawCd(float px, float py, float cx, float cy, float r, int8_t 
 static void fwArcDisengageIdle(void)
 {
     fwTurn.arc.engaged = false;
+    fwTurn.arc.zBridge = false;
     fwTurn.arc.prevLegBearing = -1;
     fwTurn.s.stage = FW_INTO_IDLE;
     fwArcDebugRelease();
@@ -853,6 +912,19 @@ typedef struct {
     int32_t hdgErrToLeg;
     float lastNavRollCmdCd;     // bank an engage blends from; written only after this controller runs
 } fwArcCtx_t;
+
+// Path left to the bridge exit [cm]; until the S pickup the straight and the second arc are still ahead
+static float fwArcBridgeRemainingCm(const fwArcCtx_t *c, int32_t hdgErrOut)
+{
+    float remaining = fwTurn.arc.r * CENTIDEGREES_TO_RADIANS((float)ABS(hdgErrOut));
+    if (fwTurn.s.stage == FW_INTO_AWAY) {
+        const float sweep2Cd = (float)ABS(wrap_18000(fwTurn.s.bOut - fwTurn.arc.outBearing));
+        // Capped: on arc 1 the straight line to the pickup would count the rest of the arc twice
+        remaining += MIN(calc_length_pythagorean_2D(fwTurn.s.ex - c->pos->x, fwTurn.s.ey - c->pos->y), fwTurn.s.straightCm)
+                     + fwTurn.s.r * CENTIDEGREES_TO_RADIANS(sweep2Cd);
+    }
+    return remaining;
+}
 
 // Tracking ON: exit the main arc on a bounded intercept course (<= 45 deg to the leg) so the
 // following corner-cut arc rolls out ON the line, not parallel to it
@@ -878,6 +950,12 @@ static void fwArcPlanFlyOverTrackingS(const fwArcCtx_t *c, const fwTurnPlan_t *p
             fwArcStageSecondArc(o2x, o2y, nAng, plan->r, c->legBearing, -dirTmp);
             fwArcEngageRampIn(plan, dirTmp, cx, cy, fwRadToBearingCd(icptRad), c->lastNavRollCmdCd);
             fwTurn.s.stage = FW_INTO_AWAY;  // second arc staged: the shared pickup logic takes over
+            float t1x, t1y;
+            fwPolarOffset(cx, cy, plan->r, nAng, &t1x, &t1y);
+            fwTurn.s.straightCm = calc_length_pythagorean_2D(fwTurn.s.ex - t1x, fwTurn.s.ey - t1y);
+            // One bridge over the whole S; path length, not sweep, because a straight lies between the arcs
+            fwArcBridgeStart(fwLegProfileAtExit(o2x, o2y, c->legBearing),
+                             fwArcBridgeRemainingCm(c, wrap_18000(fwTurn.arc.outBearing - c->cog)));
         }
     }
 }
@@ -898,6 +976,7 @@ static void fwArcPlanTangentExit(const fwArcCtx_t *c, const fwTurnPlan_t *plan, 
             if ((px - tx) * tdx + (py - ty) * tdy > 0.0f) {
                 fwArcEngageRampIn(plan, dirTmp, cx, cy,
                                   fwRadToBearingCd(atan2_approx(py - ty, px - tx)), c->lastNavRollCmdCd);
+                fwArcBridgeStartSingle(fwLegProfileAtExit(cx, cy, fwTurn.arc.outBearing), c->cog);
             }
         }
     }
@@ -964,6 +1043,7 @@ static void fwArcPlanCornerTurn(const fwArcCtx_t *c, bool capped)
             cy = p1y;
         }
         fwArcEngageRampIn(&plan, dirTmp, cx, cy, c->legBearing, c->lastNavRollCmdCd);
+        fwArcBridgeStartSingle(fwLegProfileAtExit(cx, cy, c->legBearing), c->cog);
     }
 }
 
@@ -1106,12 +1186,17 @@ static void fwArcSequencerEngaged(const fwArcCtx_t *c)
             plan.phiNomCd = fwTurn.arc.phiNomCd;
             plan.tEaseMs = fwTurn.arc.tEaseMs;
         }
+        const bool sBridge = fwTurn.arc.zBridge;
         fwArcEngageRampIn(&plan, fwTurn.s.dir, cx, cy, fwTurn.s.bOut, blendFromCd);
         fwTurn.s.stage = FW_INTO_MAIN;
         if (c->turnMode == NAV_FW_WP_TURN_COORD_FLY_INTO) {
             // Committed onto the outbound leg: the cut never crosses the WP passage plane, so no
             // geometric check can fire and the stale carrot would steer back to the old leg
             posControl.flags.wpTurnSmoothingActive = true;
+            // The FSM consumes that flag on a later tick, so activeWaypoint is still the WP this arc ends at
+            fwArcBridgeStartSingle(posControl.activeWaypoint.pos.z, c->cog);
+        } else {
+            fwTurn.arc.zBridge = sBridge;           // FLY_OVER: the bridge started at the overflight spans the whole S
         }
     }
 }
@@ -1245,6 +1330,10 @@ static void updateFwTurnArc(timeDelta_t deltaMicros)
     fwTurn.arc.rampMs += ctx.dtMs;
     fwTurn.arc.easeMs = fwTurn.arc.tEaseMs;                     // published for the handback fade
     const int32_t hdgErrOut = wrap_18000(fwTurn.arc.outBearing - ctx.cog);
+    if (fwTurn.arc.zBridge) {
+        const float flown = constrainf(1.0f - fwArcBridgeRemainingCm(&ctx, hdgErrOut) / fwTurn.arc.pathTotal, 0.0f, 1.0f);
+        fwTurn.arc.zFraction = MAX(fwTurn.arc.zFraction, flown);
+    }
     const float psiLeadCd = fwArcRollOutLeadCd(ctx.v, fwTurn.arc.tEaseMs);
     const float maxStepCd = fwArcMaxStepCd(fwTurn.arc.phiNomCd, fwTurn.arc.tEaseMs, ctx.dtMs);
 
@@ -1259,6 +1348,7 @@ static void updateFwTurnArc(timeDelta_t deltaMicros)
     default:
         if (fwArcStepCapture(hdgErrOut, psiLeadCd, maxStepCd)) {
             fwTurn.arc.engaged = false;
+            fwTurn.arc.zBridge = false;
             fwArcDebugRelease();
             return;
         }
@@ -1270,10 +1360,9 @@ static void updateFwTurnArc(timeDelta_t deltaMicros)
     if (debugMode == DEBUG_FW_TURN) {
         debug[0] = lrintf(fwTurn.arc.r);                         // active arc radius [cm]
         debug[1] = (fwTurn.arc.phase + 1) * 10 + fwTurn.s.stage; // coordinator state
-        debug[2] = fwTurn.arc.outBearing;                        // exit course [centideg]
+        debug[2] = fwTurn.arc.zBridge ? lrintf(fwArcBridgeTarget()) : 0;    // bridge altitude target [cm]
         debug[3] = hdgErrOut;                                   // remaining heading to the exit course [centideg]
         debug[4] = lrintf(fwTurn.arc.bankCmd);                   // arc bank command [centideg]
-        debug[7] = lrintf(fwTurn.arc.tEaseMs);                   // roll ease time [ms] -> sizes the turn leads
         if (fwTurn.s.stage == FW_INTO_AWAY) {
             debug[6] = lrintf(fwTurn.arc.pickupAlong);          // away arc: along-track distance to the pickup [cm]
         }

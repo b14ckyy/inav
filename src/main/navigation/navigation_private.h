@@ -526,10 +526,15 @@ typedef struct {
     navWaypointPosition_t       activeWaypoint;             // Local position, current bearing and turn angle to next WP, filled on waypoint activation
     int8_t                      activeWaypointIndex;
     float                       wpInitialAltitude;          // Altitude at start of WP
+    float                       wpProfileAltitude;          // Last commanded leg profile altitude target
+    float                       wpLegStartAlt;              // Altitude the active leg's profile starts from
+    float                       wpLegLength;                // 2D length of the active leg [cm]
     float                       wpInitialDistance;          // Distance when starting flight to WP
     float                       wpDistance;                 // Distance to active WP
     timeMs_t                    wpReachedTime;              // Time the waypoint was reached
     bool                        wpAltitudeReached;          // WP altitude achieved
+    bool                        wpProfileValid;             // wpProfileAltitude belongs to an uninterrupted WP leg sequence
+    bool                        wpBridgeActive;             // Turn bridge owned the Z target last tick; the ramp re-bases when it ends
     uint16_t                    wpReachedSeq;               // Last reached mission item sequence relative to startWpIndex
     bool                        wpReachedNotificationPending;
     bool                        wpAltitudeEnforceActive;    // WP entered altitude enforcement window
@@ -640,6 +645,7 @@ bool adjustFixedWingPositionFromRCInput(void);
 void applyFixedWingPositionController(timeUs_t currentTimeUs);
 float processHeadingYawController(timeDelta_t deltaMicros, int32_t navHeadingError, bool errorIsDecreasing);
 void applyFixedWingNavigationController(navigationFSMStateFlags_t navStateFlags, timeUs_t currentTimeUs);
+bool navFwTurnBridgeAltitude(float *targetZ);
 
 bool isFixedWingLandingDetected(void);
 

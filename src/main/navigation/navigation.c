@@ -2316,6 +2316,43 @@ static navigationFSMEvent_t nextForNonGeoStates(void)
     }
 }
 
+static float wpLegStartAltitude(void)
+{
+    // Anchoring a plane on its own altitude would discard the altitude controller's tracking lag at every WP
+    if (STATE(AIRPLANE) && posControl.wpProfileValid) {
+        return posControl.wpProfileAltitude;
+    }
+    return posControl.actualState.abs.pos.z;
+}
+
+static float wpProfileRampAltitude(void)
+{
+    // Planes ramp all the way to the WP: the enforce saturation test covers the lag the 10 % flat absorbed
+    const float endDistance = STATE(AIRPLANE) ? 0.0f : 0.1f * posControl.wpInitialDistance;
+    if (posControl.wpInitialDistance <= endDistance) {
+        return posControl.activeWaypoint.pos.z;
+    }
+    return scaleRangef(constrainf(posControl.wpDistance, endDistance, posControl.wpInitialDistance),
+                       posControl.wpInitialDistance, endDistance,
+                       posControl.wpInitialAltitude, posControl.activeWaypoint.pos.z);
+}
+
+static float wpLegProfileAltitude(void)
+{
+    float bridgeZ;
+    if (STATE(AIRPLANE) && navFwTurnBridgeAltitude(&bridgeZ)) {
+        posControl.wpBridgeActive = true;
+        return bridgeZ;
+    }
+    if (posControl.wpBridgeActive) {
+        // Resume the ramp from the arc exit, otherwise the target steps back to the pre-turn ramp
+        posControl.wpInitialDistance = posControl.wpDistance;
+        posControl.wpInitialAltitude = posControl.wpProfileAltitude;
+        posControl.wpBridgeActive = false;
+    }
+    return wpProfileRampAltitude();
+}
+
 #ifdef USE_AUTO_TRANSITION
 static uint16_t missionUserActionMask(const navMissionUserAction_e userAction)
 {
@@ -2591,7 +2628,9 @@ static void rebaseMissionWaypointAfterTransition(void)
     // the waypoint geometry from the actual post-transition position instead.
     posControl.activeWaypoint.bearing = calculateBearingToDestination(&posControl.activeWaypoint.pos);
     posControl.wpInitialDistance = calculateDistanceToDestination(&posControl.activeWaypoint.pos);
-    posControl.wpInitialAltitude = posControl.actualState.abs.pos.z;
+    posControl.wpInitialAltitude = wpLegStartAltitude();
+    posControl.wpLegStartAlt = posControl.wpInitialAltitude;
+    posControl.wpLegLength = MAX(posControl.wpInitialDistance, 1.0f);
     posControl.wpAltitudeReached = false;
     posControl.wpAltitudeEnforceActive = false;
     posControl.wpAltitudeEnforceFromStart = false;
@@ -3005,7 +3044,7 @@ static bool prepareActiveWaypointForPreAction(const navWaypoint_t *waypoint)
 
     calculateAndSetActiveWaypoint(waypoint);
     posControl.wpInitialDistance = calculateDistanceToDestination(&posControl.activeWaypoint.pos);
-    posControl.wpInitialAltitude = posControl.actualState.abs.pos.z;
+    posControl.wpInitialAltitude = wpLegStartAltitude();
     posControl.wpAltitudeReached = false;
     posControl.wpAltitudeEnforceActive = false;
     posControl.wpAltitudeEnforceFromStart = false;
@@ -3209,15 +3248,14 @@ static navigationFSMEvent_t navOnEnteringState_NAV_STATE_WAYPOINT_IN_PROGRESS(na
                     fpVector3_t tmpWaypoint;
                     tmpWaypoint.x = posControl.activeWaypoint.pos.x;
                     tmpWaypoint.y = posControl.activeWaypoint.pos.y;
-                    /* Use linear climb/descent between WPs arriving at WP altitude when within 10% of total distance to WP */
-                    const float interpolatedAltitude = scaleRangef(constrainf(posControl.wpDistance, 0.1f * posControl.wpInitialDistance, posControl.wpInitialDistance),
-                                                                    posControl.wpInitialDistance, 0.1f * posControl.wpInitialDistance,
-                                                                    posControl.wpInitialAltitude, posControl.activeWaypoint.pos.z);
+                    /* Use linear climb/descent between WPs arriving at WP altitude when within 10% of total distance to WP (planes: at the WP) */
                     tmpWaypoint.z = navMissionMultirotorWaypointAltitudeTarget(
                         STATE(MULTIROTOR),
                         posControl.wpAltitudeEnforceActive,
                         posControl.activeWaypoint.pos.z,
-                        interpolatedAltitude);
+                        wpLegProfileAltitude());
+                    posControl.wpProfileAltitude = tmpWaypoint.z;
+                    posControl.wpProfileValid = true;
 
                     setDesiredPosition(&tmpWaypoint, 0, NAV_POS_UPDATE_XY | NAV_POS_UPDATE_Z | NAV_POS_UPDATE_BEARING);
 
@@ -3941,9 +3979,9 @@ static navigationFSMEvent_t navOnEnteringState_NAV_STATE_FW_LANDING_APPROACH(nav
     fpVector3_t tmpWaypoint;
     tmpWaypoint.x = posControl.activeWaypoint.pos.x;
     tmpWaypoint.y = posControl.activeWaypoint.pos.y;
-    tmpWaypoint.z = scaleRangef(constrainf(posControl.wpDistance, posControl.wpInitialDistance / 10.0f, posControl.wpInitialDistance),
-        posControl.wpInitialDistance, posControl.wpInitialDistance / 10.0f,
-        posControl.wpInitialAltitude, posControl.activeWaypoint.pos.z);
+    tmpWaypoint.z = wpLegProfileAltitude();
+    posControl.wpProfileAltitude = tmpWaypoint.z;
+    posControl.wpProfileValid = true;
     setDesiredPosition(&tmpWaypoint, 0, NAV_POS_UPDATE_XY | NAV_POS_UPDATE_Z | NAV_POS_UPDATE_BEARING);
 
     return NAV_FSM_EVENT_NONE;
@@ -4086,6 +4124,13 @@ static navigationFSMState_t navSetNewFSMState(navigationFSMState_t newState)
         posControl.navState = newState;
         posControl.navPersistentId = navFSM[newState].persistentId;
         posControl.flags.wpTurnSmoothingActive = false;     // a turn's "WP reached" verdict is only valid in the state that produced it
+
+        const bool isWaypointAdvance = newState == NAV_STATE_WAYPOINT_PRE_ACTION || newState == NAV_STATE_WAYPOINT_IN_PROGRESS ||
+                                       newState == NAV_STATE_WAYPOINT_REACHED || newState == NAV_STATE_WAYPOINT_NEXT;
+        if (!isWaypointAdvance) {
+            posControl.wpProfileValid = false;
+            posControl.wpBridgeActive = false;
+        }
     }
     return previousState;
 }
@@ -4558,7 +4603,18 @@ bool isWaypointReached(const fpVector3_t *waypointPos, const int32_t *waypointBe
 
 bool isWaypointAltitudeReached(void)
 {
-    return ABS(navGetCurrentActualPositionAndVelocity()->pos.z - posControl.activeWaypoint.pos.z) < navConfig()->general.waypoint_enforce_altitude;
+    const float actualZ = navGetCurrentActualPositionAndVelocity()->pos.z;
+
+    // A timed hold must settle on the WP altitude itself: its exit direction is unknown, so the profile is no reference there
+    const bool plainWaypoint = posControl.waypointList[posControl.activeWaypointIndex].action == NAV_WP_ACTION_WAYPOINT;
+
+    if (STATE(AIRPLANE) && posControl.wpProfileValid && plainWaypoint) {
+        // A moving profile is tracked with a standing lag of Vz*100/response; hold only when the plane cannot keep the gradient
+        const float lagAllowance = navConfig()->fw.max_auto_climb_rate * 100.0f / MAX(pidProfile()->fwAltControlResponseFactor, 1);
+        return ABS(actualZ - posControl.wpProfileAltitude) < navConfig()->general.waypoint_enforce_altitude + lagAllowance;
+    }
+
+    return ABS(actualZ - posControl.activeWaypoint.pos.z) < navConfig()->general.waypoint_enforce_altitude;
 }
 
 static void updateHomePositionCompatibility(void)
@@ -5443,6 +5499,8 @@ bool navSetActiveWaypointIndex(uint8_t index)
 
     posControl.activeWaypointIndex = absoluteIndex;
     posControl.wpMissionRestart = false;
+    posControl.wpProfileValid = false;
+    posControl.wpBridgeActive = false;
 
     // Transition immediately to WAYPOINT_PRE_ACTION so the new WP is set up
     // on this navigation tick.  navProcessFSMEvents is safe to call here as
@@ -5778,6 +5836,17 @@ void calculateAndSetActiveWaypointToLocalPosition(const fpVector3_t *pos)
     } else {
         posControl.activeWaypoint.bearing = calculateBearingToDestination(pos);
     }
+
+    // The leg profile starts at the previous WP only when a profile led there; otherwise the ramp is anchored on the aircraft
+    if (posControl.wpProfileValid && isWaypointNavTrackingActive()) {
+        posControl.wpLegStartAlt = posControl.activeWaypoint.pos.z;
+        posControl.wpLegLength = calc_length_pythagorean_2D(pos->x - posControl.activeWaypoint.pos.x, pos->y - posControl.activeWaypoint.pos.y);
+    } else {
+        posControl.wpLegStartAlt = wpLegStartAltitude();
+        posControl.wpLegLength = calculateDistanceToDestination(pos);
+    }
+    posControl.wpLegLength = MAX(posControl.wpLegLength, 1.0f);
+
     posControl.activeWaypoint.nextTurnAngle = -1;     // no turn angle set (-1), will be set by WP mode as required
     posControl.flags.wpTurnSmoothingActive = false;   // a freshly activated WP (e.g. JUMP target) must not inherit the previous WP's smoothing-reached state
 
@@ -7217,7 +7286,7 @@ static void setLandWaypoint(const fpVector3_t *pos, const fpVector3_t *nextWpPos
     }
 
     posControl.wpInitialDistance = calculateDistanceToDestination(&posControl.activeWaypoint.pos);
-    posControl.wpInitialAltitude = posControl.actualState.abs.pos.z;
+    posControl.wpInitialAltitude = wpLegStartAltitude();
     posControl.wpAltitudeReached = false;
     posControl.wpAltitudeEnforceActive = false;
     posControl.wpAltitudeEnforceFromStart = false;

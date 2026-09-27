@@ -12,14 +12,14 @@ blackbox logging.
 |---|---|---|---|
 | 0 | Active turn/loiter radius | cm | Loiter stabiliser every cycle; overridden by the COORD_FLYBY planning radius while a corner approach is active, and by the engaged arc's radius while the coordinator flies the turn (latest writer wins) |
 | 1 | Coordinator state (see below) | – | Arc coordinator |
-| 2 | Exit course of the active arc | centideg | Arc coordinator, only while engaged |
+| 2 | Bridge altitude target | cm | Arc coordinator while engaged: the altitude target the arc commands through the turn. Single arcs (COORD_FLYBY, COORD_FLYOVER tangent exit) bridge over the arc; COORD_FLYINTO over the main arc from the second-arc pickup to the WP (not during the away arc); COORD_FLYOVER with path tracking over the whole S from the overflight, by path length. 0 when no bridge is active (FLYINTO away arc, capture fallback, no valid leg profile) and after release |
 | 3 | Remaining heading to the exit course | centideg | Arc coordinator, only while engaged |
 | 4 | Arc bank command | centideg | Arc coordinator, only while engaged; clamped to the effective bank ceiling |
 | 5 | WP-turn roll feed-forward | centideg | Feed-forward (0 when disabled, loitering, or inside the heading deadband) |
-| 6 | Energy-guard bank ceiling | deg | Energy bank guard (sits at `max_angle_inclination_rll` unless the guard is reducing it) |
-| 7 | Roll ease time | ms | Arc coordinator, only while engaged (sizes the entry/exit ramps and the turn-start lead) |
+| 6 | Energy-guard bank ceiling | deg | Energy bank guard (sits at `max_angle_inclination_rll` unless the guard is reducing it); overwritten during the S away arc (channel 1 ones digit = 1) by the along-track distance to the second-arc pickup [cm] |
+| 7 | Bridge exit altitude | cm | Arc coordinator, once per bridge start: where the bridge ends, the outbound leg profile at the (last) arc's tangent exit; COORD_FLYINTO: the WP altitude |
 
-Channels 2, 3, 4 and 7 hold their last value after the arc disengages; check channel 1 to know
+Channels 3, 4 and 7 hold their last value after the arc disengages; check channel 1 to know
 whether the coordinator is active.
 
 ## Channel 1: coordinator state
